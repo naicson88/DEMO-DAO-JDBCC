@@ -9,6 +9,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.mysql.jdbc.Statement;
+
 import db.DB;
 import db.DbException;
 import model.DAO.SellerDAO;
@@ -26,6 +28,40 @@ public class SellerDaoJDBC implements SellerDAO {
 	@Override
 	public void insert(Seller obj) {
 		
+		PreparedStatement st = null;
+		
+		try {
+			st = conn.prepareStatement(
+					"Insert into Seller " + 
+				    "(Name,Email,BirthDate, BaseSalary,DepartmentId) " +
+				    "Values (?,?,?,?,?) ", Statement.RETURN_GENERATED_KEYS);
+			
+			st.setString(1,obj.getName());
+			st.setString(2, obj.getEmail());
+			st.setDate(3, new java.sql.Date(obj.getBithDate().getTime()));
+			st.setDouble(4, obj.getBaseSalary());
+			st.setInt(5, obj.getDepartament().getId());
+			
+			int rows = st.executeUpdate();
+			if (rows > 0) {
+				ResultSet rs = st.getGeneratedKeys();
+				if(rs.next()) {
+					int id = rs.getInt(1);
+					obj.setId(id);
+				}
+				
+				DB.closeResultSet(rs);
+			}
+			else {
+				throw new DbException("Erro inesperado, nenhuma linha foi afetada");
+			}		
+		} catch (SQLException e) {
+			throw new DbException(e.getMessage());
+		} 
+		finally {
+			DB.closeStatement(st);
+			
+		}
 	}
 
 	@Override
@@ -94,7 +130,47 @@ public class SellerDaoJDBC implements SellerDAO {
 
 	@Override
 	public List<Seller> findAll() {
-		return null;
+		
+		PreparedStatement st = null;
+		ResultSet rs = null;
+		
+		try {
+			st = conn.prepareStatement(
+					
+					"Select seller. *, department.Name as DepName " +
+				    "from seller inner join department " +
+					"on seller.DepartmentId = department.Id " +
+					"Order by Name ");
+			
+			rs = st.executeQuery();
+			
+			List<Seller> list = new ArrayList<>();
+			Map<Integer, Department> map = new HashMap<>();
+			
+			while (rs.next()) {
+				
+				Department dep = map.get(rs.getInt("DepartmentId"));
+				
+				if (dep == null) {
+					
+					 dep = instantiateDepartment(rs);
+					 map.put(rs.getInt("DepartmentId"), dep);
+				}
+				
+				Seller obj = instantiateSeller(rs, dep);
+				list.add(obj);
+				
+			}
+			
+			return list;
+					
+		} catch (SQLException e) {
+			throw new DbException(e.getMessage());
+		} 
+		finally {
+			DB.closeStatement(st);
+			DB.closeResultSet(rs);
+		}
 	}
 
 	@Override
